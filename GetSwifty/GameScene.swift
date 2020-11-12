@@ -307,6 +307,8 @@ extension GameScene: SKPhysicsContactDelegate {
             }
             else if contact.bodyB.node?.name == "coin" {
                 contact.bodyB.node?.physicsBody?.categoryBitMask = 0
+                
+                ///for removing body
                 contact.bodyB.node?.removeFromParent()
             }
             

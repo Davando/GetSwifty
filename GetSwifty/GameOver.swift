@@ -8,7 +8,7 @@
 
 import SpriteKit
 
-class GameOver : SKScene {
+class GameOverScene : SKScene {
     
     
     override func sceneDidLoad() {
