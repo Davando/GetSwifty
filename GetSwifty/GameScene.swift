@@ -60,7 +60,8 @@ class GameScene: SKScene {
         joystickKnob = joystick?.childNode(withName: "knob")
         cameraNode = childNode(withName: "cameraNode") as? SKCameraNode
         
-        playerStateMachine = GKStateMachine(states: [JumpingState(playerNode: player!),
+        playerStateMachine = GKStateMachine(states:
+            [JumpingState(playerNode: player!),
             WalkingState(playerNode: player!),
             IdleState(playerNode: player!),
             LandingState(playerNode: player!),
@@ -190,6 +191,7 @@ extension GameScene {
             }
             else{
                 dying()
+                showDieScene()
             }
             invincible()
         }
@@ -209,6 +211,11 @@ extension GameScene {
         self.removeAllActions()
         fillHearts(count: 3)
         score = 0
+    }
+    
+    func showDieScene(){
+        let gameOverScene = GameScene(fileNamed: "GameOver")
+        self.view?.presentScene(gameOverScene)
     }
 }
 
@@ -376,3 +383,5 @@ extension GameScene {
         node.run(action)
     }
 }
+
+
