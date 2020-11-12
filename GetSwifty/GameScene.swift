@@ -10,6 +10,9 @@ import SpriteKit
 import GameplayKit
 
 class GameScene: SKScene {
+    
+    //to switch between scenes we need a superclass and a subclass
+    
    
     //Entities
     var entities = [GKEntity]()
@@ -23,9 +26,21 @@ class GameScene: SKScene {
     
     //Boolean
     var joystickAction = false
+    var rewardIsNotTouched = true
+    var isHit = false
     
     //Measure
     var knowRadius: CGFloat = 50.0
+    
+    //Score
+    let scoreLabel = SKLabelNode()
+    var score = 0
+
+    
+    //heart
+    var heartsArray = [SKSpriteNode]()
+    let heartContainer = SKSpriteNode()
+    
     
     // Sprite Engine
     var previousTimeInterval: TimeInterval = 0
@@ -53,7 +68,27 @@ class GameScene: SKScene {
             ])
         
         playerStateMachine.enter(IdleState.self)
-
+        
+        //Heart
+        heartContainer.position = CGPoint(x: -300, y: 140)
+        heartContainer.zPosition = 5
+        cameraNode?.addChild(heartContainer)
+        fillHearts(count: 3)
+        
+        //Timer
+        Timer.scheduledTimer(withTimeInterval: 2, repeats: true) {(timer) in
+            self.spawnHead()
+        }
+        
+        scoreLabel.position = CGPoint(x: (cameraNode?.position.x)! + 310, y: 140)
+        scoreLabel.fontColor = #colorLiteral(red: 0.4500938654, green: 0.9813225865, blue: 0.4743030667, alpha: 1)
+        
+        scoreLabel.fontSize = 24
+        scoreLabel.fontName = "AvenirNext-Bold"
+        scoreLabel.horizontalAlignmentMode = .right
+        scoreLabel.text = String(score)
+        cameraNode?.addChild(scoreLabel)
+        
         let entity = GKEntity()
         entity.addComponent(GKSKNodeComponent(node: player!))
         entity.addComponent(GKSKNodeComponent(node: joystick!))
@@ -115,12 +150,65 @@ extension GameScene {
 
 // MARK: Action
 extension GameScene {
+    
     func resetKnobPosition() {
         let initialPoint = CGPoint(x: 0, y: 0)
         let moveBack = SKAction.move(to: initialPoint, duration: 0.1)
         moveBack.timingMode = .linear
         joystickKnob?.run(moveBack)
         joystickAction = false
+    }
+    
+    func rewardTouch() {
+        score+=1
+        scoreLabel.text = String(score)
+        
+    }
+    
+    func fillHearts(count: Int){
+        for index in 1...count{
+            let heart  = SKSpriteNode(imageNamed: "heart")
+            let xPosition = heart.size.width * CGFloat(index - 1)
+            heart.position = CGPoint(x: xPosition, y: 0)
+            heartsArray.append(heart)
+            heartContainer.addChild(heart)
+            
+        }
+    }
+    
+    func loseHeart(){
+        if isHit == true {
+            let lastElementIndex = heartsArray.count - 1
+            if heartsArray.indices.contains(lastElementIndex - 1){
+                let lastHeart = heartsArray[lastElementIndex]
+                lastHeart.removeFromParent()
+                heartsArray.remove(at: lastElementIndex)
+                //making sure you can't lose another heart within 2 secs of getting hit
+                Timer.scheduledTimer(withTimeInterval: 2, repeats: false){(timer) in
+                    self.isHit = false
+                }
+            }
+            else{
+                dying()
+            }
+            invincible()
+        }
+    }
+    
+    func invincible(){
+        //during this they cant be injured
+        player?.physicsBody?.categoryBitMask = 0
+        Timer.scheduledTimer(withTimeInterval: 2, repeats: false){(timer) in
+            self.player?.physicsBody?.categoryBitMask = 2
+        }
+    }
+    
+    func dying() {
+        let dieAction = SKAction.move(to: CGPoint(x: -300, y: 0), duration: 0.1)
+        player?.run(dieAction)
+        self.removeAllActions()
+        fillHearts(count: 3)
+        score = 0
     }
 }
 
@@ -129,6 +217,8 @@ extension GameScene {
     override func update(_ currentTime: TimeInterval) {
         let deltaTime = currentTime - previousTimeInterval
         previousTimeInterval = currentTime
+        
+        rewardIsNotTouched = true
         
         //Camera
         cameraNode?.position.x = player!.position.x
@@ -189,10 +279,100 @@ extension GameScene: SKPhysicsContactDelegate {
         
         let collision = Collision(masks: (first: contact.bodyA.categoryBitMask, second: contact.bodyB.categoryBitMask))
         
+        //Included hearts
         if collision.matches(.player, .killing) {
-            let die = SKAction.move(to: CGPoint(x: -300, y: -100), duration: 0.0)
-            player?.run(die)
+            loseHeart()
+            isHit = true
+            
+            playerStateMachine.enter(StunnedState.self)
+        }
+        
+        if collision.matches(.player, .ground){
+            playerStateMachine.enter(LandingState.self)
+        }
+        
+        //for coin
+        if collision.matches(.player, .reward){
+            
+            if contact.bodyA.node?.name == "coin" {
+                contact.bodyA.node?.physicsBody?.categoryBitMask = 0
+               
+            }
+            else if contact.bodyB.node?.name == "coin" {
+                contact.bodyB.node?.physicsBody?.categoryBitMask = 0
+                contact.bodyB.node?.removeFromParent()
+            }
+            
+            if rewardIsNotTouched {
+                rewardTouch()
+                rewardIsNotTouched=false
+            }
+        }
+        
+        //for collision with the cromulon
+        if collision.matches(.ground, .killing){
+            if contact.bodyA.node?.name == "Cromulon", let cromulon = contact.bodyA.node {
+                createCrack(at: cromulon.position)
+                cromulon.removeFromParent()
+            }
+            if contact.bodyB.node?.name == "Cromulon", let cromulon = contact.bodyB.node {
+                createCrack(at: cromulon.position)
+                cromulon.removeFromParent()
+            }
         }
     }
     
+}
+
+//Mark: meter
+extension GameScene {
+    
+    func spawnHead() {
+        let node = SKSpriteNode(imageNamed: "cromulon")
+        node.name = "Cromulon"
+        let randomXPosition = Int(arc4random_uniform(UInt32(self.size.width)))
+        node.setScale(0.3)
+        node.position = CGPoint(x: randomXPosition, y: 270)
+        
+        node.anchorPoint = CGPoint(x: 0.5, y: 1)
+        
+        
+        let physicsBody = SKPhysicsBody(circleOfRadius: 30)
+        node.physicsBody = physicsBody
+        
+        physicsBody.categoryBitMask = Collision.Masks.killing.bitmask
+        
+        physicsBody.collisionBitMask = Collision.Masks.player.bitmask | Collision.Masks.ground.bitmask
+        physicsBody.contactTestBitMask = Collision.Masks.player.bitmask | Collision.Masks.ground.bitmask
+        physicsBody.fieldBitMask = Collision.Masks.player.bitmask | Collision.Masks.ground.bitmask
+        
+        
+        physicsBody.affectedByGravity = true
+        physicsBody.allowsRotation = false
+        physicsBody.restitution = 0.2
+        physicsBody.friction = 10
+        
+        addChild(node)
+        
+    }
+    
+    func createCrack(at position: CGPoint){
+        
+        let node = SKSpriteNode(imageNamed: "crack")
+        
+        node.position.x = position.x
+        node.position.y = position.y-70
+        node.zPosition = 4
+        
+        addChild(node)
+        
+        let action = SKAction.sequence([
+            SKAction.fadeIn(withDuration: 0.1),
+            SKAction.wait(forDuration: 3),
+            SKAction.fadeOut(withDuration: 0.2),
+            SKAction.removeFromParent(),
+        ])
+        
+        node.run(action)
+    }
 }
